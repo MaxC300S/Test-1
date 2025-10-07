@@ -26,6 +26,7 @@ class CandleDataset:
     features: np.ndarray
     targets: np.ndarray
     current_close: np.ndarray
+    next_close: np.ndarray
 
 
 def fetch_ethusdt_candles(
@@ -104,7 +105,7 @@ def prepare_dataset(
     if len(df) <= window:
         raise ValueError("Not enough data to build training windows")
 
-    features, targets, current_close = [], [], []
+    features, targets, current_close, next_close = [], [], [], []
     normalised, scale = _normalise(df)
 
     values = normalised.values
@@ -114,13 +115,16 @@ def prepare_dataset(
         features.append(window_slice)
         targets.append(target_slice)
         current_close.append(df.iloc[idx - 1]["close"])
+        next_close.append(df.iloc[idx]["close"])
 
     features_arr = np.asarray(features, dtype=np.float32)
     targets_arr = np.asarray(targets, dtype=np.float32)
     current_close_arr = np.asarray(current_close, dtype=np.float32)
+    next_close_arr = np.asarray(next_close, dtype=np.float32)
 
     return CandleDataset(
         features=features_arr,
         targets=targets_arr,
         current_close=current_close_arr,
+        next_close=next_close_arr,
     )

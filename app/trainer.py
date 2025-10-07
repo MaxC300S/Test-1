@@ -209,7 +209,8 @@ class CandleTrainer:
         tensor_x = torch.from_numpy(dataset.features).to(self.device)
         tensor_y = torch.from_numpy(dataset.targets).to(self.device)
         current_close = torch.from_numpy(dataset.current_close).to(self.device)
-        ds = torch.utils.data.TensorDataset(tensor_x, tensor_y, current_close)
+        next_close = torch.from_numpy(dataset.next_close).to(self.device)
+        ds = torch.utils.data.TensorDataset(tensor_x, tensor_y, current_close, next_close)
         return torch.utils.data.DataLoader(
             ds,
             batch_size=self.config.batch_size,
@@ -218,7 +219,7 @@ class CandleTrainer:
         )
 
     def _step(self, batch):
-        inputs, targets, current_close = batch
+        inputs, targets, current_close, next_close = batch
         self.optimizer.zero_grad()
         preds, direction_logits, trade_logits = self.model(inputs)
 
@@ -229,8 +230,8 @@ class CandleTrainer:
         direction_loss = self.direction_loss(direction_logits, direction_targets)
 
         trade_signal = torch.tanh(trade_logits.squeeze(-1))
-        actual_close = targets[:, 3]
         prev_close = current_close
+        actual_close = next_close
 
         price_change = (actual_close - prev_close) / (prev_close + 1e-6)
         trade_return = trade_signal * price_change - trade_signal.abs() * self.config.commission
