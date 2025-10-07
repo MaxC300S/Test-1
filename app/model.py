@@ -7,6 +7,19 @@ from typing import Tuple
 import torch
 from torch import nn
 
+try:  # pragma: no cover - prefer package-relative imports when available
+    from .torch_compat import ensure_torch_classes
+except ImportError:  # pragma: no cover - allow running as a script
+    import sys
+    from pathlib import Path
+
+    package_root = Path(__file__).resolve().parent
+    if str(package_root) not in sys.path:
+        sys.path.append(str(package_root))
+    from torch_compat import ensure_torch_classes
+
+ensure_torch_classes()
+
 
 class PositionalEncoding(nn.Module):
     """Standard sinusoidal positional encoding."""
