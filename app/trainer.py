@@ -150,9 +150,16 @@ class CandleTrainer:
 
             loader = self._make_loader(dataset)
             epoch_profit, correct_direction, total_samples = 0.0, 0, 0
+            trade_size_sum, trade_size_batches = 0.0, 0
 
             for batch in loader:
-                loss, batch_return, batch_correct, batch_total = self._step(batch)
+                (
+                    _loss,
+                    batch_return,
+                    batch_correct,
+                    batch_total,
+                    avg_trade_size,
+                ) = self._step(batch)
 
                 growth = max(0.0, 1.0 + batch_return)
                 previous_budget = self.state.budget
@@ -161,6 +168,8 @@ class CandleTrainer:
                 epoch_profit += batch_profit
                 correct_direction += batch_correct
                 total_samples += batch_total
+                trade_size_sum += avg_trade_size
+                trade_size_batches += 1
 
                 if self.stop_event.is_set():
                     break
@@ -170,21 +179,25 @@ class CandleTrainer:
             if total_samples:
                 self.state.direction_accuracy = correct_direction / total_samples
 
+            avg_trade_size_epoch = trade_size_sum / trade_size_batches if trade_size_batches else 0.0
+
             self.metrics = {
                 "epoch": self.state.epoch,
                 "profit": self.state.profit,
                 "budget": self.state.budget,
                 "direction_accuracy": self.state.direction_accuracy,
                 "epoch_profit": epoch_profit,
+                "avg_trade_size": avg_trade_size_epoch,
             }
 
             LOGGER.info(
-                "Epoch %s | Epoch PnL %.2f | Total profit %.2f | Budget %.2f | Direction accuracy %.3f",
+                "Epoch %s | Epoch PnL %.2f | Total profit %.2f | Budget %.2f | Direction accuracy %.3f | Avg trade %.3f",
                 self.state.epoch,
                 epoch_profit,
                 self.state.profit,
                 self.state.budget,
                 self.state.direction_accuracy,
+                avg_trade_size_epoch,
             )
 
             now = time.time()
@@ -229,12 +242,16 @@ class CandleTrainer:
         mse = self.criterion(preds[:, :5], price_targets)
         direction_loss = self.direction_loss(direction_logits, direction_targets)
 
-        trade_signal = torch.tanh(trade_logits.squeeze(-1))
+        direction_prob = torch.sigmoid(direction_logits)
+        trade_size = torch.sigmoid(trade_logits.squeeze(-1))
+        trade_direction = (direction_prob - 0.5) * 2.0
+
         prev_close = current_close
         actual_close = next_close
 
         price_change = (actual_close - prev_close) / (prev_close + 1e-6)
-        trade_return = trade_signal * price_change - trade_signal.abs() * self.config.commission
+        trade_return = trade_size * trade_direction.squeeze(-1) * price_change
+        trade_return = trade_return - trade_size * self.config.commission
         reward_loss = -self.config.reward_scale * trade_return.mean()
 
         loss = mse + direction_loss + reward_loss
@@ -243,9 +260,16 @@ class CandleTrainer:
         self.optimizer.step()
 
         batch_return = float(trade_return.mean().item())
-        correct_direction = (torch.sigmoid(direction_logits) > 0.5).eq(direction_targets).sum()
+        correct_direction = (direction_prob > 0.5).eq(direction_targets).sum()
         batch_total = direction_targets.size(0)
-        return loss.item(), batch_return, int(correct_direction), int(batch_total)
+        avg_trade_size = float(trade_size.mean().item())
+        return (
+            loss.item(),
+            batch_return,
+            int(correct_direction),
+            int(batch_total),
+            avg_trade_size,
+        )
 
     # ------------------------------------------------------------------
     def save_checkpoint(self) -> None:

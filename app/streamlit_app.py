@@ -122,7 +122,14 @@ def main() -> None:
     metrics = trainer.latest_metrics() or _load_metrics()
 
     if metrics:
-        col_budget, col_profit, col_epoch_profit, col_accuracy, col_epoch = st.columns(5)
+        (
+            col_budget,
+            col_profit,
+            col_epoch_profit,
+            col_accuracy,
+            col_trade,
+            col_epoch,
+        ) = st.columns(6)
         col_budget.metric("Simulated budget (USDT)", f"{metrics.get('budget', 0):.2f}")
         col_profit.metric("Cumulative profit (USDT)", f"{metrics.get('profit', 0):.2f}")
         col_epoch_profit.metric(
@@ -132,6 +139,11 @@ def main() -> None:
         col_accuracy.metric(
             "Direction accuracy",
             f"{metrics.get('direction_accuracy', 0) * 100:.2f}%",
+        )
+        col_trade.metric(
+            "Avg trade size",
+            f"{metrics.get('avg_trade_size', 0) * 100:.2f}%",
+            help="Average proportion of the simulated budget allocated per batch during the last epoch.",
         )
         col_epoch.metric("Epoch", int(metrics.get("epoch", 0)))
     else:
