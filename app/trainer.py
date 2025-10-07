@@ -12,12 +12,16 @@ from typing import Dict, Optional
 import torch
 from torch import nn, optim
 
-try:  # pragma: no cover - import bridge for script execution
+if __package__ in {None, ""}:  # pragma: no cover - when executed directly
+    import sys
+    package_root = Path(__file__).resolve().parent
+    if str(package_root) not in sys.path:
+        sys.path.append(str(package_root))
+    from data import CandleDataset, fetch_ethusdt_candles, prepare_dataset  # type: ignore
+    from model import CandleTransformer  # type: ignore
+else:  # pragma: no cover - when imported as part of the package
     from .data import CandleDataset, fetch_ethusdt_candles, prepare_dataset
     from .model import CandleTransformer
-except ImportError:  # pragma: no cover - when run as top-level script
-    from app.data import CandleDataset, fetch_ethusdt_candles, prepare_dataset
-    from app.model import CandleTransformer
 
 LOGGER = logging.getLogger(__name__)
 if not LOGGER.handlers:
