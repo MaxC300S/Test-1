@@ -48,7 +48,7 @@ class CandleTransformer(nn.Module):
 
     def __init__(
         self,
-        input_dim: int = 6,
+        input_dim: int = 5,
         d_model: int = 128,
         nhead: int = 8,
         num_layers: int = 4,
