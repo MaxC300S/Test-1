@@ -8,14 +8,15 @@ from pathlib import Path
 
 import streamlit as st
 
-if __package__ in {None, ""}:  # pragma: no cover - allow running via "streamlit run"
+try:  # pragma: no cover - prefer package-relative imports when available
+    from .trainer import CHECKPOINT_PATH, METRICS_PATH, CandleTrainer, TrainingConfig
+except ImportError:  # pragma: no cover - allow running via "streamlit run app/streamlit_app.py"
     import sys
+
     package_root = Path(__file__).resolve().parent
     if str(package_root) not in sys.path:
         sys.path.append(str(package_root))
-    from trainer import CHECKPOINT_PATH, METRICS_PATH, CandleTrainer, TrainingConfig  # type: ignore
-else:  # pragma: no cover - when imported as part of the package
-    from .trainer import CHECKPOINT_PATH, METRICS_PATH, CandleTrainer, TrainingConfig
+    from trainer import CHECKPOINT_PATH, METRICS_PATH, CandleTrainer, TrainingConfig
 
 logging.basicConfig(level=logging.INFO)
 
