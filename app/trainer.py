@@ -237,7 +237,13 @@ class CandleTrainer:
         preds, direction_logits, trade_logits = self.model(inputs)
 
         price_targets = targets[:, :5]
-        direction_targets = (targets[:, 3] > targets[:, 0]).float().unsqueeze(-1)
+        # Align the supervised direction label with the same close-to-close
+        # movement used for the trading reward. Using close-versus-open from the
+        # normalised targets encouraged the classifier to prefer the opposite
+        # sign whenever a candle closed below its open but still advanced
+        # relative to the previous close (i.e. gap up then fade), driving
+        # systematically incorrect trades.
+        direction_targets = (next_close > current_close).float().unsqueeze(-1)
 
         mse = self.criterion(preds[:, :5], price_targets)
         direction_loss = self.direction_loss(direction_logits, direction_targets)
