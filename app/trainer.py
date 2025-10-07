@@ -152,7 +152,12 @@ class CandleTrainer:
             epoch_profit, correct_direction, total_samples = 0.0, 0, 0
 
             for batch in loader:
-                loss, batch_profit, batch_correct, batch_total = self._step(batch)
+                loss, batch_return, batch_correct, batch_total = self._step(batch)
+
+                growth = max(0.0, 1.0 + batch_return)
+                previous_budget = self.state.budget
+                self.state.budget = previous_budget * growth
+                batch_profit = self.state.budget - previous_budget
                 epoch_profit += batch_profit
                 correct_direction += batch_correct
                 total_samples += batch_total
@@ -161,7 +166,7 @@ class CandleTrainer:
                     break
 
             self.state.epoch += 1
-            self.state.profit += epoch_profit
+            self.state.profit = self.state.budget - self.config.budget
             if total_samples:
                 self.state.direction_accuracy = correct_direction / total_samples
 
@@ -170,11 +175,13 @@ class CandleTrainer:
                 "profit": self.state.profit,
                 "budget": self.state.budget,
                 "direction_accuracy": self.state.direction_accuracy,
+                "epoch_profit": epoch_profit,
             }
 
             LOGGER.info(
-                "Epoch %s | Profit %.2f | Budget %.2f | Direction accuracy %.3f",
+                "Epoch %s | Epoch PnL %.2f | Total profit %.2f | Budget %.2f | Direction accuracy %.3f",
                 self.state.epoch,
+                epoch_profit,
                 self.state.profit,
                 self.state.budget,
                 self.state.direction_accuracy,
@@ -221,25 +228,23 @@ class CandleTrainer:
         mse = self.criterion(preds[:, :5], price_targets)
         direction_loss = self.direction_loss(direction_logits, direction_targets)
 
-        trade_prob = torch.sigmoid(trade_logits)
-        predicted_close = preds[:, 3]
+        trade_signal = torch.tanh(trade_logits.squeeze(-1))
         actual_close = targets[:, 3]
         prev_close = current_close
 
         price_change = (actual_close - prev_close) / (prev_close + 1e-6)
-        trade_profit = (price_change - self.config.commission) * trade_prob.squeeze()
-        reward_loss = -self.config.reward_scale * trade_profit.mean()
+        trade_return = trade_signal * price_change - trade_signal.abs() * self.config.commission
+        reward_loss = -self.config.reward_scale * trade_return.mean()
 
         loss = mse + direction_loss + reward_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         self.optimizer.step()
 
-        batch_profit = float(trade_profit.mean().item() * self.state.budget)
-        self.state.budget += batch_profit
+        batch_return = float(trade_return.mean().item())
         correct_direction = (torch.sigmoid(direction_logits) > 0.5).eq(direction_targets).sum()
         batch_total = direction_targets.size(0)
-        return loss.item(), batch_profit, int(correct_direction), int(batch_total)
+        return loss.item(), batch_return, int(correct_direction), int(batch_total)
 
     # ------------------------------------------------------------------
     def save_checkpoint(self) -> None:
